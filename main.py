@@ -51,10 +51,23 @@ class AdapAD:
         self.anomalies = list()
         
         # for logging purpose
-        self.f_name = 'results/' + config.data_source + '/' + 'progress_' + str(minimal_threshold) + '.csv'
-        print(self.f_name)
-        self.f_log = open(self.f_name, 'w')
-        self.f_log.write('observed,predicted,low,high,anomalous,err,threshold\n')
+        self.f_name = (
+            "results/"
+            + config.data_source
+            + "/"
+            + "progress_"
+            + str(minimal_threshold)
+            + ".csv"
+        )
+        # Check if the directory exists, if not, create it
+        dir_name = os.path.dirname(self.f_name)
+        if not os.path.exists(dir_name):
+            os.makedirs(dir_name)
+            print("Directory ", dir_name, " Created ")
+
+        print("Logging at:", self.f_name)
+        self.f_log = open(self.f_name, "w")
+        self.f_log.write("observed,predicted,low,high,anomalous,err,threshold\n")
         self.f_log.close()
         
     def set_training_data(self, data):
