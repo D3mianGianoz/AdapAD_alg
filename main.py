@@ -16,6 +16,7 @@ import config
 import os
 
 torch.manual_seed(0)
+
         
 class AdapAD:
     def __init__(self, predictor_config, value_range_config, minimal_threshold):
@@ -29,20 +30,24 @@ class AdapAD:
         self.predictor_config = predictor_config
         
         # init learning components
-        self.data_predictor = NormalDataPredictor(config.LSTM_size_layer, 
+        self.data_predictor = NormalDataPredictor(
+            config.LSTM_size_layer,
                                                        config.LSTM_size, 
-                                                       self.predictor_config['lookback_len'],
-                                                       self.predictor_config['prediction_len'])
-        self.generator = LSTMPredictor(self.predictor_config['prediction_len'], 
-                    self.predictor_config['lookback_len'], 
+            self.predictor_config["lookback_len"],
+            self.predictor_config["prediction_len"],
+        )
+        self.generator = LSTMPredictor(
+            self.predictor_config["prediction_len"],
+            self.predictor_config["lookback_len"],
                     config.LSTM_size, 
                     config.LSTM_size_layer, 
-                    self.predictor_config['lookback_len']) 
+            self.predictor_config["lookback_len"],
+        )
         
         # immediate databases
         self.predicted_vals = PredictedNormalDataDb()
         self.minimal_threshold = minimal_threshold
-        print('Minimal threshold:', self.minimal_threshold)
+        print("Minimal threshold:", self.minimal_threshold)
         self.thresholds = AnomalousThresholdDb()
         self.thresholds.append(self.minimal_threshold)
         
@@ -82,7 +87,11 @@ class AdapAD:
         loss_l = list()
         
         # slide data 
-        x, y = sliding_windows(data2learn, self.predictor_config['lookback_len'], self.predictor_config['prediction_len'])
+        x, y = sliding_windows(
+            data2learn,
+            self.predictor_config["lookback_len"],
+            self.predictor_config["prediction_len"],
+        )
         x, y = x.astype(float), y.astype(float)
         y = np.reshape(y, (y.shape[0], y.shape[1]))
         
@@ -99,8 +108,8 @@ class AdapAD:
                 optimizer.zero_grad()
                 
                 _x, _y = x[i], y[i]
-                outputs = learner(torch.Tensor(_x).reshape((1,-1)))
-                loss = criterion(outputs, torch.Tensor(_y).reshape((1,-1)))
+                outputs = learner(torch.Tensor(_x).reshape((1, -1)))
+                loss = criterion(outputs, torch.Tensor(_y).reshape((1, -1)))
                 loss.backward(retain_graph=True)
                 optimizer.step()
 
@@ -108,113 +117,147 @@ class AdapAD:
     
     def __learn_error_pattern(self, trainX, trainY):
         for i in range(len(trainX)):
-            train_predicted_val = self.data_predictor.predict(torch.reshape(trainX[i], (1,-1)))
+            train_predicted_val = self.data_predictor.predict(
+                torch.reshape(trainX[i], (1, -1))
+            )
             self.predicted_vals.append(train_predicted_val)
 
         trainY = trainY.data.numpy()
-        observed_vals_ = list(trainY[:,0])
+        observed_vals_ = list(trainY[:, 0])
         
-        
-        predictive_errors = NormalDataPredictionErrorCalculator.calc_error(np.array(observed_vals_), 
-                                                                           np.array(self.predicted_vals.get_tail(len(observed_vals_))))
+        predictive_errors = NormalDataPredictionErrorCalculator.calc_error(
+            np.array(observed_vals_),
+            np.array(self.predicted_vals.get_tail(len(observed_vals_))),
+        )
         predictive_errors = predictive_errors.tolist()
         self.predictive_errors = PredictionErrorDb(predictive_errors)
         
         # self.threshold_generator.train(config.epoch_train,
                                          # config.epoch_update,
                                          # predictive_errors)
-        self.generator, _, _ = self.__batch_learning(self.generator, self.predictive_errors.get_tail(self.predictive_errors.get_length()))
+        self.generator, _, _ = self.__batch_learning(
+            self.generator,
+            self.predictive_errors.get_tail(self.predictive_errors.get_length()),
+        )
         
         predicted_vals = self.predicted_vals.get_tail(len(observed_vals_))
         for i in range(len(observed_vals_)):
-            self.f_log = open(self.f_name, 'a')
-            text2write = '{},{},,,,,\n'.format(self.__reverse_normalized_data(observed_vals_[i]),
-                                    self.__reverse_normalized_data(predicted_vals[i]))
+            self.f_log = open(self.f_name, "a")
+            text2write = "{},{},,,,,\n".format(
+                self.__reverse_normalized_data(observed_vals_[i]),
+                self.__reverse_normalized_data(predicted_vals[i]),
+            )
             self.f_log.write(text2write)
             self.f_log.close()
         
     def train(self, data):
-        trainX, trainY = self.data_predictor.train(config.epoch_train, 
-                                                                 config.lr_train,
-                                                                 self.observed_vals.get_training_data())
-        print('Trained NormalDataPredictor')
+        trainX, trainY = self.data_predictor.train(
+            config.epoch_train, config.lr_train, self.observed_vals.get_training_data()
+        )
+        print("Trained NormalDataPredictor")
         
         # self.__learn_error_pattern(train_tensorX, train_tensorY)
         for i in range(len(trainX)):
-            train_predicted_val = self.data_predictor.predict(torch.reshape(trainX[i], (1,-1)))
+            train_predicted_val = self.data_predictor.predict(
+                torch.reshape(trainX[i], (1, -1))
+            )
             self.predicted_vals.append(train_predicted_val)
 
         trainY = trainY.data.numpy()
-        observed_vals_ = list(trainY[:,0])
+        observed_vals_ = list(trainY[:, 0])
         
-        predictive_errors = NormalDataPredictionErrorCalculator.calc_error(np.array(observed_vals_), 
-                                                                           np.array(self.predicted_vals.get_tail(len(observed_vals_))))
+        predictive_errors = NormalDataPredictionErrorCalculator.calc_error(
+            np.array(observed_vals_),
+            np.array(self.predicted_vals.get_tail(len(observed_vals_))),
+        )
         predictive_errors = predictive_errors.tolist()
         self.predictive_errors = PredictionErrorDb(predictive_errors)
         
         # self.threshold_generator.train(config.epoch_train,
                                          # config.epoch_update,
                                          # predictive_errors)
-        self.generator, _, _ = self.__batch_learning(self.generator, self.predictive_errors.get_tail(self.predictive_errors.get_length()))
+        self.generator, _, _ = self.__batch_learning(
+            self.generator,
+            self.predictive_errors.get_tail(self.predictive_errors.get_length()),
+        )
         
         predicted_vals = self.predicted_vals.get_tail(len(observed_vals_))
         for i in range(len(observed_vals_)):
-            self.f_log = open(self.f_name, 'a')
-            text2write = '{},{},,,,,\n'.format(self.__reverse_normalized_data(observed_vals_[i]),
-                                    self.__reverse_normalized_data(predicted_vals[i]))
+            self.f_log = open(self.f_name, "a")
+            text2write = "{},{},,,,,\n".format(
+                self.__reverse_normalized_data(observed_vals_[i]),
+                self.__reverse_normalized_data(predicted_vals[i]),
+            )
             self.f_log.write(text2write)
             self.f_log.close()
-        print('Trained AnomalousThresholdGenerator')
+        print("Trained AnomalousThresholdGenerator")
         
     def __logging(self, is_anomalous_ret):
-        self.f_log = open(self.f_name, 'a')
+        self.f_log = open(self.f_name, "a")
             
-        text2write = '{},{},{},{},{},{},{}\n'.format(self.__reverse_normalized_data(self.observed_vals.get_tail()),
+        text2write = "{},{},{},{},{},{},{}\n".format(
+            self.__reverse_normalized_data(self.observed_vals.get_tail()),
                                 self.__reverse_normalized_data(self.predicted_vals.get_tail()),
-                                self.__reverse_normalized_data(self.predicted_vals.get_tail()-self.thresholds.get_tail()),
-                                self.__reverse_normalized_data(self.predicted_vals.get_tail()+self.thresholds.get_tail()),
+            self.__reverse_normalized_data(
+                self.predicted_vals.get_tail() - self.thresholds.get_tail()
+            ),
+            self.__reverse_normalized_data(
+                self.predicted_vals.get_tail() + self.thresholds.get_tail()
+            ),
                                 is_anomalous_ret,
                                 self.predictive_errors.get_tail(),
-                                self.thresholds.get_tail())
+            self.thresholds.get_tail(),
+        )
         self.f_log.write(text2write)
         self.f_log.close()                       
         
     def __normalize_data(self, val):
-        #return float(val)
-        return (float(val) - self.sensor_range.lower()) / (self.sensor_range.upper() - self.sensor_range.lower())
+        # return float(val)
+        return (float(val) - self.sensor_range.lower()) / (
+            self.sensor_range.upper() - self.sensor_range.lower()
+        )
         
     def __reverse_normalized_data(self, val):
-        return val*(self.sensor_range.upper() - self.sensor_range.lower())+self.sensor_range.lower()
+        return (
+            val * (self.sensor_range.upper() - self.sensor_range.lower())
+            + self.sensor_range.lower()
+        )
         
     def is_inside_range(self, val):
         observed_val = self.__reverse_normalized_data(val)
-        if observed_val >= self.sensor_range.lower() and observed_val <= self.sensor_range.upper():
+        if (
+            observed_val >= self.sensor_range.lower()
+            and observed_val <= self.sensor_range.upper()
+        ):
             return True
         else:
             return False
             
     def __prepare_data_for_prediction(self, supposed_anomalous_pos):
         cnt = 0
-        _x_temp = self.observed_vals.get_tail(1+self.predictor_config['lookback_len'])[:-1]
-        predicted_vals = self.predicted_vals.get_tail(self.predictor_config['lookback_len'])
-        for predicted_i in range(self.predictor_config['lookback_len']):
+        _x_temp = self.observed_vals.get_tail(
+            1 + self.predictor_config["lookback_len"]
+        )[:-1]
+        predicted_vals = self.predicted_vals.get_tail(
+            self.predictor_config["lookback_len"]
+        )
+        for predicted_i in range(self.predictor_config["lookback_len"]):
             checked_pos = predicted_i + 1
             if not self.is_inside_range(_x_temp[-checked_pos]):
                 _x_temp[-checked_pos] = predicted_vals[-checked_pos]
-            
                             
         _x = torch.from_numpy(np.array(_x_temp).reshape(1, -1)).float()
         
         return _x
         
     def __is_default_normal(self):
-        observed_vals = self.observed_vals.get_tail(self.predictor_config['train_size'])
+        observed_vals = self.observed_vals.get_tail(self.predictor_config["train_size"])
         cnt = 0
         for observed_val in observed_vals:
             if not self.is_inside_range(observed_val):
                 cnt += 1
                 
-        if cnt > self.predictor_config['train_size']//2:
+        if cnt > self.predictor_config["train_size"] // 2:
             return True
         else:
             return False
@@ -231,7 +274,10 @@ class AdapAD:
         for epoch in range(num_epochs):
             predicted_val = self.generator(past_observations.float())
             optimizer.zero_grad()           
-            loss = criterion(predicted_val, torch.from_numpy(np.array(observed_val).reshape(1, -1)).float())        
+            loss = criterion(
+                predicted_val,
+                torch.from_numpy(np.array(observed_val).reshape(1, -1)).float(),
+            )
             loss.backward(retain_graph=True)
             optimizer.step()
             
@@ -240,9 +286,8 @@ class AdapAD:
               break     
             loss_l.append(loss.item())
             
-      
-    def simplify_error(self,errors, N_sigma=0):
-        return np.mean(errors) + N_sigma*np.std(errors)
+    def simplify_error(self, errors, N_sigma=0):
+        return np.mean(errors) + N_sigma * np.std(errors)
         
     def is_anomalous(self, observed_val):
         is_anomalous_ret = False
@@ -257,7 +302,9 @@ class AdapAD:
         
         # predict normal value
         past_observations = self.__prepare_data_for_prediction(supposed_anomalous_pos)
-        predicted_val = self.data_predictor.predict(torch.reshape(past_observations.float(), (1, -1)))
+        predicted_val = self.data_predictor.predict(
+            torch.reshape(past_observations.float(), (1, -1))
+        )
         self.predicted_vals.append(predicted_val)
         
         # perform range check
@@ -266,28 +313,37 @@ class AdapAD:
             is_anomalous_ret = True
         else:
             self.generator.eval()
-            past_predictive_errors = self.predictive_errors.get_tail(self.predictor_config['lookback_len'])
-            past_predictive_errors = torch.from_numpy(np.array(past_predictive_errors).reshape(1, -1)).float()
+            past_predictive_errors = self.predictive_errors.get_tail(
+                self.predictor_config["lookback_len"]
+            )
+            past_predictive_errors = torch.from_numpy(
+                np.array(past_predictive_errors).reshape(1, -1)
+            ).float()
             # threshold = self.threshold_generator.generate(torch.reshape(past_predictive_errors, (1,-1)), self.minimal_threshold)
             with torch.no_grad():       
                 threshold = self.generator(past_predictive_errors)
                 threshold = threshold.data.numpy()
-                threshold = max(threshold[0,0] , self.minimal_threshold)
+                threshold = max(threshold[0, 0], self.minimal_threshold)
             self.thresholds.append(threshold)
         
-            prediction_error = prediction_error = NormalDataPredictionErrorCalculator.calc_error(predicted_val, observed_val)
+            prediction_error = prediction_error = (
+                NormalDataPredictionErrorCalculator.calc_error(
+                    predicted_val, observed_val
+                )
+            )
             self.predictive_errors.append(prediction_error)
-            
         
             if prediction_error > threshold:
                 if not self.__is_default_normal():
                     is_anomalous_ret = True
                     self.anomalies.append(supposed_anomalous_pos)
             
-            self.data_predictor.update(config.epoch_update, 
+            self.data_predictor.update(
+                config.epoch_update,
                                        config.lr_update, 
-                                       torch.reshape(past_observations, (1,-1)), 
-                                       observed_val)
+                torch.reshape(past_observations, (1, -1)),
+                observed_val,
+            )
                 
             if is_anomalous_ret or threshold > self.minimal_threshold:
                 # self.threshold_generator.update(config.update_G_epoch, 
@@ -301,26 +357,25 @@ class AdapAD:
         return is_anomalous_ret
         
     def clean(self):
-        self.predicted_vals.clean(self.predictor_config['lookback_len'])
-        self.predictive_errors.clean(self.predictor_config['lookback_len'])
-        self.thresholds.clean(self.predictor_config['lookback_len'])
+        self.predicted_vals.clean(self.predictor_config["lookback_len"])
+        self.predictive_errors.clean(self.predictor_config["lookback_len"])
+        self.thresholds.clean(self.predictor_config["lookback_len"])
               
 
 if __name__ == "__main__":
     predictor_config, value_range_config, minimal_threshold = config.init_config()
     if not minimal_threshold:
-        raise("It is mandatory to set a minimal threshold")
+        raise ValueError("It is mandatory to set a minimal threshold")
     
     data_source = pd.read_csv(config.data_source_path)        
-    data_production = data_source['value'].tolist()
+    data_production = data_source["value"].tolist()
     len_data_subject = len(data_production)
     
     # AdapAD
     AdapAD_obj = AdapAD(predictor_config, value_range_config, minimal_threshold)
-    print('GATHERING DATA FOR TRAINING...', predictor_config['train_size'])
+    print("GATHERING DATA FOR TRAINING...", predictor_config["train_size"])
     
     observed_data = list()
-    
     
     for data_idx in range(len_data_subject):
         measured_value = data_production[data_idx]
