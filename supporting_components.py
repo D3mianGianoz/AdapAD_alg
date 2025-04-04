@@ -21,9 +21,6 @@ class PredictedNormalDataDb():
         
     def append(self, val):
         self.predicted_vals.append(val)
-    
-    def clean(self, keep_length):
-        self.predicted_vals = self.predicted_vals[-keep_length:]
         
     def get_tail(self, length=1):
         if length == 1:
@@ -65,9 +62,6 @@ class PredictionErrorDb():
         
     def append(self, val):
         self.prediction_errors.append(val)
-    
-    def clean(self, keep_length):
-        self.prediction_errors = self.prediction_errors[-keep_length:]
         
     def get_tail(self, length=1):
         if length == 1:
@@ -86,21 +80,21 @@ class DataSubject():
         self.observed_vals = normal_data.copy()
         self.is_retrieved_training_data = False
     
+    def append(self, val):
+        self.observed_vals.append(val)
+
     def get_tail(self, length=1):
         if length == 1:
             return self.observed_vals[-1]
         else:
             return self.observed_vals[-length:]
         
-    def append(self, val):
-        self.observed_vals.append(val)
-        
+    def get_length(self):
+        return len(self.observed_vals)
+
     def get_training_data(self):
         if self.is_retrieved_training_data:
             raise Exception("Already retrieved training data! Check the flow...")
         
         self.is_retrieved_training_data = True
         return self.observed_vals
-        
-    def get_length(self):
-        return len(self.observed_vals)
