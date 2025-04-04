@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 import torch.utils.data
-from utils import *
+from utils import sliding_windows
+
 
 class LSTMPredictor(nn.Module):
     def __init__(self, num_classes, input_size, hidden_size, num_layers, lookback_len):
